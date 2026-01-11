@@ -12,16 +12,19 @@ import org.jenkinsci.Symbol;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.QueryParameter;
 
+import javax.annotation.Nonnull;
 import java.io.File;
 import java.io.IOException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- * Tool installer for Rust that handles version management and installation.
- * Supports automatic download and installation of Rust via rustup.
+ * A tool installer for Rust that automates the download and installation of Rust
+ * toolchains via rustup. This class supports different versions, including channels
+ * (stable, beta, nightly) and specific version numbers.
  */
 public class RustToolInstaller extends ToolInstaller {
+
     private static final Logger LOGGER = Logger.getLogger(RustToolInstaller.class.getName());
 
     private final String version;
@@ -29,13 +32,14 @@ public class RustToolInstaller extends ToolInstaller {
     private final boolean installRustup;
 
     /**
-     * Constructor for RustToolInstaller.
+     * Constructs a new {@code RustToolInstaller}.
      *
-     * @param label              Label for this installer (can be null)
-     * @param version            Rust version to install (e.g., "stable", "1.75.0",
-     *                           "nightly")
-     * @param preferBuiltInTools If true, prefer system-installed Rust if available
-     * @param installRustup      If true, install rustup if not present
+     * @param label              The label for this installer (can be null).
+     * @param version            The Rust version to install (e.g., "stable", "1.75.0", "nightly").
+     * @param preferBuiltInTools If {@code true}, the installer will prefer a system-installed
+     *                           Rust if it is available in the PATH.
+     * @param installRustup      If {@code true}, the installer will attempt to install rustup
+     *                           if it is not already present.
      */
     @DataBoundConstructor
     public RustToolInstaller(String label, String version, boolean preferBuiltInTools, boolean installRustup) {
@@ -45,20 +49,34 @@ public class RustToolInstaller extends ToolInstaller {
         this.installRustup = installRustup;
     }
 
+    /** Returns the configured Rust version. */
     public String getVersion() {
         return version;
     }
 
+    /** Returns whether to prefer a system-installed Rust. */
     public boolean isPreferBuiltInTools() {
         return preferBuiltInTools;
     }
 
+    /** Returns whether to install rustup if it's not present. */
     public boolean isInstallRustup() {
         return installRustup;
     }
 
+    /**
+     * Performs the installation of the Rust toolchain. This method is called by Jenkins
+     * when a tool needs to be installed on a node.
+     *
+     * @param tool The tool to be installed.
+     * @param node The node on which to install the tool.
+     * @param log  A listener for logging the installation progress.
+     * @return The path to the installed tool.
+     * @throws IOException If an I/O error occurs during installation.
+     * @throws InterruptedException If the installation is interrupted.
+     */
     @Override
-    public FilePath performInstallation(ToolInstallation tool, Node node, TaskListener log)
+    public FilePath performInstallation(@Nonnull ToolInstallation tool, @Nonnull Node node, @Nonnull TaskListener log)
             throws IOException, InterruptedException {
 
         FilePath toolPath = preferredLocation(tool, node);
@@ -66,95 +84,108 @@ public class RustToolInstaller extends ToolInstaller {
 
         log.getLogger().println("Installing Rust " + version + " to " + toolHome.getAbsolutePath());
 
-        // If tool is already installed, verify and return
+        // If the tool is already installed and verified, skip the installation
         if (toolHome.exists() && RustInstaller.verifyInstallation(toolHome)) {
-            try {
-                String installedVersion = RustInstaller.getCargoVersion(toolHome);
-                if (installedVersion != null) {
-                    log.getLogger().println("Rust " + installedVersion + " is already installed");
-                } else {
-                    log.getLogger().println("Rust " + version + " is already installed");
-                }
-            } catch (Exception e) {
-                LOGGER.log(Level.WARNING, "Failed to get installed version", e);
-                log.getLogger().println("Rust " + version + " is already installed");
-            }
+            logVersion(toolHome, log);
             return toolPath;
         }
 
-        // Check if we should use system Rust/Cargo
+        // If configured to prefer built-in tools and cargo is in the PATH, use it
         if (preferBuiltInTools && RustInstaller.isCargoInPath()) {
-            log.getLogger().println("Using system Rust/Cargo installation");
-            // Note: When using system tools, we still return the tool path
-            // but the actual binaries will be found via PATH
+            log.getLogger().println("Using system-installed Rust/Cargo from PATH.");
             return toolPath;
         }
 
-        // Ensure directory exists
+        // Ensure the installation directory exists
         if (!toolHome.exists() && !toolHome.mkdirs()) {
-            throw new IOException("Failed to create tool directory: " + toolHome);
+            throw new IOException("Failed to create tool installation directory: " + toolHome);
         }
 
-        // Ensure rustup is installed if requested
+        // Install rustup if it's requested and not already available
         if (installRustup && !RustInstaller.isRustupInPath()) {
-            log.getLogger().println("Installing rustup...");
+            log.getLogger().println("rustup not found. Installing rustup...");
             RustInstaller.installRustup(toolHome);
-            log.getLogger().println("rustup installed successfully");
+            log.getLogger().println("rustup installed successfully.");
         }
 
-        // Install the specific toolchain version
+        // Install the specified toolchain version
         if (installRustup || RustInstaller.isRustupInPath()) {
-            log.getLogger().println("Installing Rust toolchain " + version + "...");
+            log.getLogger().println("Installing Rust toolchain: " + version + "...");
             RustInstaller.installToolchain(toolHome, version);
-            log.getLogger().println("Rust toolchain " + version + " installed successfully");
+            log.getLogger().println("Rust toolchain " + version + " installed successfully.");
         } else {
-            String warning = "rustup not available and installRustup is false. " +
-                    "Installation may fail or use system Rust if available.";
+            String warning = "rustup is not available and 'installRustup' is not checked. "
+                    + "The installation may fail or default to a system-installed Rust if available.";
             log.getLogger().println("WARNING: " + warning);
             LOGGER.warning(warning);
         }
 
-        // Verify installation
+        // Verify the installation
         log.getLogger().println("Verifying installation...");
         if (!RustInstaller.verifyInstallation(toolHome)) {
-            throw new IOException("Rust installation verification failed. " +
-                    "cargo or rustc binary not found in: " + toolHome);
+            throw new IOException("Rust installation verification failed. "
+                    + "Could not find cargo or rustc binaries in: " + toolHome);
         }
+        log.getLogger().println("Installation verified successfully.");
 
-        try {
-            String installedVersion = RustInstaller.getCargoVersion(toolHome);
-            if (installedVersion != null) {
-                log.getLogger().println("Successfully installed Rust " + installedVersion);
-            } else {
-                log.getLogger().println("Successfully installed Rust (version detection unavailable)");
-            }
-        } catch (Exception e) {
-            LOGGER.log(Level.WARNING, "Failed to get installed version", e);
-            log.getLogger().println("Successfully installed Rust (version check failed: " + e.getMessage() + ")");
-        }
+        // Log the final installed version
+        logVersion(toolHome, log);
 
         return toolPath;
     }
 
     /**
-     * Descriptor for RustToolInstaller.
+     * Helper method to log the installed Rust version.
+     */
+    private void logVersion(File toolHome, TaskListener log) {
+        try {
+            String installedVersion = RustInstaller.getCargoVersion(toolHome);
+            if (installedVersion != null) {
+                log.getLogger().println("Successfully installed Rust " + installedVersion);
+            } else {
+                log.getLogger().println("Successfully installed Rust (version detection unavailable).");
+            }
+        } catch (Exception e) {
+            LOGGER.log(Level.WARNING, "Failed to get installed Rust version", e);
+            log.getLogger().println("Successfully installed Rust (version check failed: " + e.getMessage() + ")");
+        }
+    }
+
+    /**
+     * Descriptor for {@link RustToolInstaller}. This class provides metadata for the
+     * installer and handles UI validation.
      */
     @Extension
     @Symbol("rustInstaller")
     public static class DescriptorImpl extends ToolInstallerDescriptor<RustToolInstaller> {
 
+        /**
+         * Returns the display name for this installer, which is shown in the Jenkins UI.
+         *
+         * @return The display name.
+         */
+        @Nonnull
         @Override
         public String getDisplayName() {
             return "Install Rust via rustup";
         }
 
+        /**
+         * Indicates whether this installer is applicable to the given tool type.
+         *
+         * @param toolType The type of tool to check.
+         * @return {@code true} if the tool is a {@link RustInstallation}, {@code false} otherwise.
+         */
         @Override
         public boolean isApplicable(Class<? extends ToolInstallation> toolType) {
             return toolType == RustInstallation.class;
         }
 
         /**
-         * Validate version string.
+         * Performs validation on the Rust version field in the UI.
+         *
+         * @param value The version string entered by the user.
+         * @return A {@link FormValidation} object indicating the result of the validation.
          */
         public FormValidation doCheckVersion(@QueryParameter String value) {
             if (value == null || value.trim().isEmpty()) {
