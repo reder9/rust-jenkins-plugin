@@ -1,0 +1,32 @@
+# Jenkins Plugin Development
+target/
+work/
+*.hpi
+*.jpi
+*.hpl
+
+# IDEs
+.project
+.classpath
+.settings/
+*.iml
+.idea/
+*.ipr
+*.iws
+nbproject/
+build.xml
+.vscode/
+
+# Build Tools
+atlassian-ide-plugin.xml
+maven-eclipse.xml
+
+# macOS
+.DS_Store
+
+# User Specific Request
+Jenkinsfile
+
+# Logs/Temporary
+*.log
+dependency-reduced-pom.xml
