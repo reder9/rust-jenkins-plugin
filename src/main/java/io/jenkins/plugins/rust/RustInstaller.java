@@ -2,8 +2,10 @@ package io.jenkins.plugins.rust;
 
 import org.apache.commons.io.IOUtils;
 
+import javax.annotation.Nonnull;
 import java.io.File;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.attribute.PosixFilePermission;
 import java.util.EnumSet;
@@ -12,10 +14,12 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- * Handles Rust version detection and installation via rustup.
- * Provides robust error handling, retry logic, and progress logging.
+ * Handles the installation of Rust toolchains, including rustup and specific
+ * versions of Rust. This class provides methods for version detection,
+ * installation verification, and robust error handling with retry logic.
  */
 public class RustInstaller {
+
     private static final Logger LOGGER = Logger.getLogger(RustInstaller.class.getName());
 
     private static final String RUSTUP_INSTALLER_URL = "https://sh.rustup.rs";
@@ -24,45 +28,76 @@ public class RustInstaller {
     private static final int RETRY_DELAY_MS = 2000;
 
     /**
-     * Get the installed Cargo version.
+     * Retrieves the installed Cargo version from a given Rust installation directory.
      *
-     * @param rustHome Rust installation home directory
-     * @return Version string, or null if not found
-     * @throws IOException          If an I/O error occurs
-     * @throws InterruptedException If interrupted while waiting for process
+     * @param rustHome The home directory of the Rust installation.
+     * @return The version string (e.g., "1.75.0"), or {@code null} if the version
+     *         cannot be determined.
+     * @throws IOException If an I/O error occurs while running the command.
+     * @throws InterruptedException If the command execution is interrupted.
      */
-    public static String getCargoVersion(File rustHome) throws IOException, InterruptedException {
-        if (!rustHome.exists() || !rustHome.isDirectory()) {
-            LOGGER.log(Level.FINE, "Rust home does not exist or is not a directory: {0}", rustHome);
+    public static String getCargoVersion(@Nonnull File rustHome) throws IOException, InterruptedException {
+        return getVersion(rustHome, "cargo");
+    }
+
+    /**
+     * Retrieves the installed Rust compiler (rustc) version from a given Rust
+     * installation directory.
+     *
+     * @param rustHome The home directory of the Rust installation.
+     * @return The version string (e.g., "1.75.0"), or {@code null} if the version
+     *         cannot be determined.
+     * @throws IOException If an I/O error occurs while running the command.
+     * @throws InterruptedException If the command execution is interrupted.
+     */
+    public static String getRustVersion(@Nonnull File rustHome) throws IOException, InterruptedException {
+        return getVersion(rustHome, "rustc");
+    }
+
+    /**
+     * A generic method to retrieve the version of a Rust binary (cargo or rustc).
+     *
+     * @param rustHome The home directory of the Rust installation.
+     * @param binaryName The name of the binary ("cargo" or "rustc").
+     * @return The version string, or {@code null} if not found.
+     * @throws IOException If an I/O error occurs.
+     * @throws InterruptedException If the command execution is interrupted.
+     */
+    private static String getVersion(@Nonnull File rustHome, @Nonnull String binaryName)
+            throws IOException, InterruptedException {
+        if (!rustHome.isDirectory()) {
+            LOGGER.log(Level.FINE, "{0} home is not a directory: {1}", new Object[]{binaryName, rustHome});
             return null;
         }
 
-        File cargoBin = getCargoExecutable(rustHome);
-        if (cargoBin == null || !cargoBin.exists()) {
-            LOGGER.log(Level.FINE, "Cargo binary not found in: {0}", rustHome);
+        File executable = getExecutable(rustHome, binaryName);
+        if (executable == null || !executable.exists()) {
+            LOGGER.log(Level.FINE, "{0} binary not found in: {1}", new Object[]{binaryName, rustHome});
             return null;
         }
 
         try {
-            ProcessBuilder pb = new ProcessBuilder(cargoBin.getAbsolutePath(), "--version");
+            ProcessBuilder pb = new ProcessBuilder(executable.getAbsolutePath(), "--version");
             pb.redirectErrorStream(true);
 
             Process process = pb.start();
-            String output = IOUtils.toString(process.getInputStream(), "UTF-8");
+            String output = IOUtils.toString(process.getInputStream(), StandardCharsets.UTF_8);
             int exitCode = process.waitFor();
 
             if (exitCode == 0 && output != null) {
-                // Parse version from output like "cargo 1.75.0 (1bc8dbc342 2023-12-07)"
+                // Parses version from output like "cargo 1.75.0 (1bc8dbc342 2023-12-07)"
+                // or "rustc 1.75.0 (82e1608df 2023-12-21)"
                 String[] parts = output.trim().split("\\s+");
                 if (parts.length >= 2) {
+                    LOGGER.log(Level.FINE, "Found {0} version: {1}", new Object[]{binaryName, parts[1]});
                     return parts[1];
                 }
             } else {
-                LOGGER.log(Level.WARNING, "cargo --version failed with exit code {0}: {1}",
-                        new Object[] { exitCode, output });
+                LOGGER.log(Level.WARNING, "{0} --version failed with exit code {1}: {2}",
+                        new Object[]{binaryName, exitCode, output});
             }
         } catch (IOException | InterruptedException e) {
-            LOGGER.log(Level.WARNING, "Error getting Cargo version", e);
+            LOGGER.log(Level.WARNING, "Error getting " + binaryName + " version", e);
             throw e;
         }
 
@@ -70,65 +105,20 @@ public class RustInstaller {
     }
 
     /**
-     * Get the installed Rust version.
+     * Verifies that a Rust installation is valid by checking for the presence and
+     * executability of the {@code cargo} and {@code rustc} binaries.
      *
-     * @param rustHome Rust installation home directory
-     * @return Version string, or null if not found
-     * @throws IOException          If an I/O error occurs
-     * @throws InterruptedException If interrupted while waiting for process
+     * @param rustHome The home directory of the Rust installation.
+     * @return {@code true} if the installation is valid, {@code false} otherwise.
      */
-    public static String getRustVersion(File rustHome) throws IOException, InterruptedException {
-        if (!rustHome.exists() || !rustHome.isDirectory()) {
-            LOGGER.log(Level.FINE, "Rust home does not exist or is not a directory: {0}", rustHome);
-            return null;
-        }
-
-        File rustcBin = getRustcExecutable(rustHome);
-        if (rustcBin == null || !rustcBin.exists()) {
-            LOGGER.log(Level.FINE, "rustc binary not found in: {0}", rustHome);
-            return null;
-        }
-
-        try {
-            ProcessBuilder pb = new ProcessBuilder(rustcBin.getAbsolutePath(), "--version");
-            pb.redirectErrorStream(true);
-
-            Process process = pb.start();
-            String output = IOUtils.toString(process.getInputStream(), "UTF-8");
-            int exitCode = process.waitFor();
-
-            if (exitCode == 0 && output != null) {
-                // Parse version from output like "rustc 1.75.0 (82e1608df 2023-12-21)"
-                String[] parts = output.trim().split("\\s+");
-                if (parts.length >= 2) {
-                    return parts[1];
-                }
-            } else {
-                LOGGER.log(Level.WARNING, "rustc --version failed with exit code {0}: {1}",
-                        new Object[] { exitCode, output });
-            }
-        } catch (IOException | InterruptedException e) {
-            LOGGER.log(Level.WARNING, "Error getting Rust version", e);
-            throw e;
-        }
-
-        return null;
-    }
-
-    /**
-     * Verify Rust installation in directory.
-     *
-     * @param rustHome Rust installation home directory
-     * @return true if installation is valid
-     */
-    public static boolean verifyInstallation(File rustHome) {
-        if (!rustHome.exists() || !rustHome.isDirectory()) {
-            LOGGER.log(Level.FINE, "Rust home does not exist or is not a directory: {0}", rustHome);
+    public static boolean verifyInstallation(@Nonnull File rustHome) {
+        if (!rustHome.isDirectory()) {
+            LOGGER.log(Level.FINE, "Rust home is not a directory: {0}", rustHome);
             return false;
         }
 
-        File cargoBin = getCargoExecutable(rustHome);
-        File rustcBin = getRustcExecutable(rustHome);
+        File cargoBin = getExecutable(rustHome, "cargo");
+        File rustcBin = getExecutable(rustHome, "rustc");
 
         boolean cargoExists = cargoBin != null && cargoBin.exists() && cargoBin.canExecute();
         boolean rustcExists = rustcBin != null && rustcBin.exists() && rustcBin.canExecute();
@@ -144,7 +134,7 @@ public class RustInstaller {
     }
 
     /**
-     * Check if Cargo is available in system PATH.
+     * Checks if cargo is available in the system PATH.
      *
      * @return true if cargo is in PATH
      */
@@ -153,7 +143,7 @@ public class RustInstaller {
     }
 
     /**
-     * Check if rustup is available in system PATH.
+     * Checks if rustup is available in the system PATH.
      *
      * @return true if rustup is in PATH
      */
@@ -162,44 +152,34 @@ public class RustInstaller {
     }
 
     /**
-     * Check if a command is available in the system PATH.
+     * Checks if a command is available in the system's PATH.
      *
-     * @param command Command name to check
-     * @return true if command is in PATH
+     * @param command The name of the command to check (e.g., "cargo").
+     * @return {@code true} if the command is found in the PATH, {@code false} otherwise.
      */
-    private static boolean isCommandInPath(String command) {
+    private static boolean isCommandInPath(@Nonnull String command) {
         String checkCommand = isWindows() ? "where " + command : "which " + command;
         ProcessBuilder pb = new ProcessBuilder(
-                isWindows() ? new String[] { "cmd", "/c", checkCommand } : new String[] { "sh", "-c", checkCommand });
+                isWindows() ? new String[]{"cmd", "/c", checkCommand} : new String[]{"sh", "-c", checkCommand});
         try {
             Process process = pb.start();
             int exitCode = process.waitFor();
             return exitCode == 0;
-        } catch (Exception e) {
+        } catch (IOException | InterruptedException e) {
             LOGGER.log(Level.FINE, "Error checking for " + command + " in PATH", e);
             return false;
         }
     }
 
     /**
-     * Get the installation path for a specific Rust version.
+     * Installs rustup into a specified destination directory. This method handles both
+     * Unix-like and Windows systems and includes retry logic for robustness.
      *
-     * @param toolsDirectory Base tools directory
-     * @param version        Rust version
-     * @return Installation path
+     * @param destination The directory where rustup should be installed.
+     * @throws IOException If the installation fails after multiple retries.
+     * @throws InterruptedException If the installation is interrupted.
      */
-    public static File getInstallationPath(File toolsDirectory, String version) {
-        return new File(toolsDirectory, "rust-" + version);
-    }
-
-    /**
-     * Install rustup if not present.
-     *
-     * @param destination Installation destination directory
-     * @throws IOException          If installation fails
-     * @throws InterruptedException If interrupted during installation
-     */
-    public static void installRustup(File destination) throws IOException, InterruptedException {
+    public static void installRustup(@Nonnull File destination) throws IOException, InterruptedException {
         LOGGER.log(Level.INFO, "Installing rustup to: {0}", destination.getAbsolutePath());
 
         if (!destination.exists() && !destination.mkdirs()) {
@@ -209,7 +189,7 @@ public class RustInstaller {
         IOException lastException = null;
         for (int attempt = 1; attempt <= MAX_RETRIES; attempt++) {
             try {
-                LOGGER.log(Level.INFO, "Installation attempt {0} of {1}", new Object[] { attempt, MAX_RETRIES });
+                LOGGER.log(Level.INFO, "rustup installation attempt {0} of {1}", new Object[]{attempt, MAX_RETRIES});
 
                 if (isWindows()) {
                     installRustupWindows(destination);
@@ -222,7 +202,7 @@ public class RustInstaller {
 
             } catch (IOException e) {
                 lastException = e;
-                LOGGER.log(Level.WARNING, "Installation attempt " + attempt + " failed: " + e.getMessage(), e);
+                LOGGER.log(Level.WARNING, "Installation attempt " + attempt + " failed", e);
 
                 if (attempt < MAX_RETRIES) {
                     LOGGER.log(Level.INFO, "Retrying in {0}ms...", RETRY_DELAY_MS);
@@ -235,219 +215,149 @@ public class RustInstaller {
     }
 
     /**
-     * Install rustup on Unix-like systems (Linux, macOS).
+     * Installs rustup on Unix-like systems (Linux, macOS).
      */
-    private static void installRustupUnix(File destination) throws IOException, InterruptedException {
-        LOGGER.info("Installing rustup for Unix-like system");
-
+    private static void installRustupUnix(@Nonnull File destination) throws IOException, InterruptedException {
+        LOGGER.info("Starting rustup installation for Unix-like system");
         File installer = new File(destination, "rustup-init.sh");
 
-        // Download rustup-init.sh
+        // Download the rustup-init.sh script
         LOGGER.log(Level.INFO, "Downloading rustup installer from: {0}", RUSTUP_INSTALLER_URL);
-        ProcessBuilder downloadPb = new ProcessBuilder(
-                "curl", "--proto", "=https", "--tlsv1.2", "-sSf", RUSTUP_INSTALLER_URL,
-                "-o", installer.getAbsolutePath());
-        downloadPb.redirectErrorStream(true);
+        executeCommand(new ProcessBuilder("curl", "--proto", "=https", "--tlsv1.2", "-sSf",
+                RUSTUP_INSTALLER_URL, "-o", installer.getAbsolutePath()), "download rustup installer");
 
-        Process downloadProcess = downloadPb.start();
-        String downloadOutput = IOUtils.toString(downloadProcess.getInputStream(), "UTF-8");
-        int downloadExitCode = downloadProcess.waitFor();
-
-        if (downloadExitCode != 0) {
-            throw new IOException("Failed to download rustup installer. Exit code: " +
-                    downloadExitCode + ", Output: " + downloadOutput);
-        }
-
-        // Make executable
+        // Make the installer executable
         try {
-            Set<PosixFilePermission> perms = EnumSet.of(
-                    PosixFilePermission.OWNER_READ,
-                    PosixFilePermission.OWNER_WRITE,
-                    PosixFilePermission.OWNER_EXECUTE,
-                    PosixFilePermission.GROUP_READ,
-                    PosixFilePermission.GROUP_EXECUTE,
-                    PosixFilePermission.OTHERS_READ,
-                    PosixFilePermission.OTHERS_EXECUTE);
+            Set<PosixFilePermission> perms = EnumSet.of(PosixFilePermission.OWNER_READ,
+                    PosixFilePermission.OWNER_WRITE, PosixFilePermission.OWNER_EXECUTE);
             Files.setPosixFilePermissions(installer.toPath(), perms);
-            LOGGER.fine("Set executable permissions on installer");
+            LOGGER.fine("Set executable permissions on rustup installer");
         } catch (UnsupportedOperationException e) {
-            LOGGER.log(Level.FINE, "Could not set POSIX permissions (filesystem doesn't support it)", e);
+            LOGGER.log(Level.FINE, "Could not set POSIX permissions (filesystem may not support it)", e);
         }
 
-        // Run installer with -y flag for non-interactive mode
+        // Run the installer non-interactively
         LOGGER.info("Running rustup installer");
-        ProcessBuilder installPb = new ProcessBuilder(
-                "sh", installer.getAbsolutePath(), "-y", "--default-toolchain", "none", "--no-modify-path");
+        ProcessBuilder installPb = new ProcessBuilder("sh", installer.getAbsolutePath(), "-y",
+                "--default-toolchain", "none", "--no-modify-path");
         installPb.environment().put("CARGO_HOME", destination.getAbsolutePath());
         installPb.environment().put("RUSTUP_HOME", new File(destination, "rustup").getAbsolutePath());
-        installPb.redirectErrorStream(true);
-
-        Process installProcess = installPb.start();
-        String installOutput = IOUtils.toString(installProcess.getInputStream(), "UTF-8");
-        int installExitCode = installProcess.waitFor();
-
-        if (installExitCode != 0) {
-            throw new IOException("Failed to install rustup. Exit code: " +
-                    installExitCode + ", Output: " + installOutput);
-        }
-
-        LOGGER.log(Level.FINE, "rustup installation output: {0}", installOutput);
+        executeCommand(installPb, "install rustup");
     }
 
     /**
-     * Install rustup on Windows.
+     * Installs rustup on Windows systems.
      */
-    private static void installRustupWindows(File destination) throws IOException, InterruptedException {
-        LOGGER.info("Installing rustup for Windows");
-
+    private static void installRustupWindows(@Nonnull File destination) throws IOException, InterruptedException {
+        LOGGER.info("Starting rustup installation for Windows");
         File installer = new File(destination, "rustup-init.exe");
 
-        // Download rustup-init.exe
+        // Download the rustup-init.exe installer
         LOGGER.log(Level.INFO, "Downloading rustup installer from: {0}", RUSTUP_INSTALLER_WINDOWS_URL);
-        ProcessBuilder downloadPb = new ProcessBuilder(
-                "powershell", "-NoProfile", "-Command",
-                "Invoke-WebRequest -Uri '" + RUSTUP_INSTALLER_WINDOWS_URL + "' -OutFile '" +
-                        installer.getAbsolutePath() + "' -UseBasicParsing");
-        downloadPb.redirectErrorStream(true);
+        String command = "Invoke-WebRequest -Uri '" + RUSTUP_INSTALLER_WINDOWS_URL + "' -OutFile '"
+                + installer.getAbsolutePath() + "' -UseBasicParsing";
+        executeCommand(new ProcessBuilder("powershell", "-NoProfile", "-Command", command),
+                "download rustup installer");
 
-        Process downloadProcess = downloadPb.start();
-        String downloadOutput = IOUtils.toString(downloadProcess.getInputStream(), "UTF-8");
-        int downloadExitCode = downloadProcess.waitFor();
-
-        if (downloadExitCode != 0) {
-            throw new IOException("Failed to download rustup installer. Exit code: " +
-                    downloadExitCode + ", Output: " + downloadOutput);
-        }
-
-        // Run installer with -y flag for non-interactive mode
+        // Run the installer non-interactively
         LOGGER.info("Running rustup installer");
-        ProcessBuilder installPb = new ProcessBuilder(
-                installer.getAbsolutePath(), "-y", "--default-toolchain", "none", "--no-modify-path");
+        ProcessBuilder installPb = new ProcessBuilder(installer.getAbsolutePath(), "-y",
+                "--default-toolchain", "none", "--no-modify-path");
         installPb.environment().put("CARGO_HOME", destination.getAbsolutePath());
         installPb.environment().put("RUSTUP_HOME", new File(destination, "rustup").getAbsolutePath());
-        installPb.redirectErrorStream(true);
-
-        Process installProcess = installPb.start();
-        String installOutput = IOUtils.toString(installProcess.getInputStream(), "UTF-8");
-        int installExitCode = installProcess.waitFor();
-
-        if (installExitCode != 0) {
-            throw new IOException("Failed to install rustup. Exit code: " +
-                    installExitCode + ", Output: " + installOutput);
-        }
-
-        LOGGER.log(Level.FINE, "rustup installation output: {0}", installOutput);
+        executeCommand(installPb, "install rustup");
     }
 
     /**
-     * Install a specific Rust toolchain version using rustup.
+     * Installs a specific Rust toolchain version using rustup.
      *
-     * @param rustHome Rust installation home directory
-     * @param version  Toolchain version (e.g., "stable", "1.75.0", "nightly")
-     * @throws IOException          If installation fails
-     * @throws InterruptedException If interrupted during installation
+     * @param rustHome The home directory of the Rust installation.
+     * @param version  The toolchain to install (e.g., "stable", "1.75.0", "nightly").
+     * @throws IOException If the installation fails.
+     * @throws InterruptedException If the installation is interrupted.
      */
-    public static void installToolchain(File rustHome, String version) throws IOException, InterruptedException {
+    public static void installToolchain(@Nonnull File rustHome, @Nonnull String version)
+            throws IOException, InterruptedException {
         LOGGER.log(Level.INFO, "Installing Rust toolchain {0} to: {1}",
-                new Object[] { version, rustHome.getAbsolutePath() });
+                new Object[]{version, rustHome.getAbsolutePath()});
 
         String rustupBin = getRustupBinary(rustHome);
         if (rustupBin == null) {
-            throw new IOException("rustup binary not found. Please install rustup first.");
+            throw new IOException("rustup binary not found. Please ensure rustup is installed.");
         }
 
-        // Install toolchain
+        // Install the toolchain
         LOGGER.log(Level.INFO, "Running: rustup toolchain install {0}", version);
-        ProcessBuilder pb = new ProcessBuilder(rustupBin, "toolchain", "install", version);
-        pb.environment().put("CARGO_HOME", rustHome.getAbsolutePath());
-        pb.environment().put("RUSTUP_HOME", new File(rustHome, "rustup").getAbsolutePath());
-        pb.redirectErrorStream(true);
+        ProcessBuilder installPb = new ProcessBuilder(rustupBin, "toolchain", "install", version);
+        configureRustupEnvironment(installPb, rustHome);
+        executeCommand(installPb, "install toolchain " + version);
 
+        // Set the installed toolchain as the default for this installation
+        LOGGER.log(Level.INFO, "Setting {0} as default toolchain", version);
+        ProcessBuilder defaultPb = new ProcessBuilder(rustupBin, "default", version);
+        configureRustupEnvironment(defaultPb, rustHome);
+        executeCommand(defaultPb, "set default toolchain");
+    }
+
+    /**
+     * Helper method to execute a command and handle its output and exit code.
+     */
+    private static void executeCommand(ProcessBuilder pb, String description) throws IOException, InterruptedException {
+        pb.redirectErrorStream(true);
         Process process = pb.start();
-        String output = IOUtils.toString(process.getInputStream(), "UTF-8");
+        String output = IOUtils.toString(process.getInputStream(), StandardCharsets.UTF_8);
         int exitCode = process.waitFor();
 
         if (exitCode != 0) {
-            throw new IOException("Failed to install Rust toolchain " + version +
-                    ". Exit code: " + exitCode + ", Output: " + output);
+            throw new IOException(
+                    "Failed to " + description + ". Exit code: " + exitCode + ", Output: " + output);
         }
-
-        LOGGER.log(Level.FINE, "Toolchain installation output: {0}", output);
-
-        // Set as default
-        LOGGER.log(Level.INFO, "Setting {0} as default toolchain", version);
-        ProcessBuilder defaultPb = new ProcessBuilder(rustupBin, "default", version);
-        defaultPb.environment().put("CARGO_HOME", rustHome.getAbsolutePath());
-        defaultPb.environment().put("RUSTUP_HOME", new File(rustHome, "rustup").getAbsolutePath());
-        defaultPb.redirectErrorStream(true);
-
-        Process defaultProcess = defaultPb.start();
-        String defaultOutput = IOUtils.toString(defaultProcess.getInputStream(), "UTF-8");
-        int defaultExitCode = defaultProcess.waitFor();
-
-        if (defaultExitCode != 0) {
-            LOGGER.log(Level.WARNING, "Failed to set default toolchain, but installation succeeded. Output: {0}",
-                    defaultOutput);
-        } else {
-            LOGGER.log(Level.FINE, "Default toolchain output: {0}", defaultOutput);
-        }
+        LOGGER.log(Level.FINE, "{0} output: {1}", new Object[]{description, output});
     }
 
     /**
-     * Get the cargo executable file.
+     * Configures the environment variables (CARGO_HOME and RUSTUP_HOME) for a rustup command.
      */
-    private static File getCargoExecutable(File rustHome) {
-        String cargoName = isWindows() ? "cargo.exe" : "cargo";
-        File cargoBin = new File(rustHome, "bin" + File.separator + cargoName);
-
-        if (!cargoBin.exists()) {
-            // Try alternative location
-            cargoBin = new File(rustHome, "cargo" + File.separator + "bin" + File.separator + cargoName);
-        }
-
-        return cargoBin.exists() ? cargoBin : null;
+    private static void configureRustupEnvironment(ProcessBuilder pb, File rustHome) {
+        pb.environment().put("CARGO_HOME", rustHome.getAbsolutePath());
+        pb.environment().put("RUSTUP_HOME", new File(rustHome, "rustup").getAbsolutePath());
     }
 
     /**
-     * Get the rustc executable file.
-     */
-    private static File getRustcExecutable(File rustHome) {
-        String rustcName = isWindows() ? "rustc.exe" : "rustc";
-        File rustcBin = new File(rustHome, "bin" + File.separator + rustcName);
-
-        if (!rustcBin.exists()) {
-            // Try alternative location
-            rustcBin = new File(rustHome, "rustc" + File.separator + "bin" + File.separator + rustcName);
-        }
-
-        return rustcBin.exists() ? rustcBin : null;
-    }
-
-    /**
-     * Get the rustup binary path.
+     * Locates a Rust executable (cargo or rustc) within a given installation directory.
      *
-     * @return Path to rustup binary, or null if not found
+     * @param rustHome The home directory of the Rust installation.
+     * @param name The name of the binary ("cargo" or "rustc").
+     * @return A {@link File} object representing the executable, or {@code null} if not found.
      */
-    private static String getRustupBinary(File rustHome) {
-        String rustupName = isWindows() ? "rustup.exe" : "rustup";
-        File rustupBin = new File(rustHome, "bin" + File.separator + rustupName);
+    private static File getExecutable(@Nonnull File rustHome, @Nonnull String name) {
+        String exeName = isWindows() ? name + ".exe" : name;
+        File binDir = new File(rustHome, "bin");
+        File executable = new File(binDir, exeName);
+        return executable.exists() ? executable : null;
+    }
 
-        if (rustupBin.exists()) {
-            return rustupBin.getAbsolutePath();
+    /**
+     * Locates the rustup binary, checking both the installation directory and the system PATH.
+     *
+     * @param rustHome The home directory of the Rust installation.
+     * @return The path to the rustup binary, or {@code null} if not found.
+     */
+    private static String getRustupBinary(@Nonnull File rustHome) {
+        File rustupFile = getExecutable(rustHome, "rustup");
+        if (rustupFile != null) {
+            return rustupFile.getAbsolutePath();
         }
-
-        // Check if rustup is in PATH
-        if (isRustupInPath()) {
+        if (isCommandInPath("rustup")) {
             return "rustup";
         }
-
         return null;
     }
 
     /**
-     * Check if running on Windows.
+     * Checks if the current operating system is Windows.
      *
-     * @return true if running on Windows
+     * @return {@code true} if the OS is Windows, {@code false} otherwise.
      */
     private static boolean isWindows() {
         return File.pathSeparatorChar == ';';
