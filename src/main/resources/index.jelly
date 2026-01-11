@@ -1,0 +1,22 @@
+<?jelly escape-by-default='true'?>
+<div>
+    <p>
+        This plugin provides automated Rust version management and installation for Jenkins.
+        It supports installation via rustup and allows you to configure multiple Rust versions
+        for use in your Jenkins builds.
+    </p>
+    <p>
+        Features:
+    </p>
+    <ul>
+        <li>Automatic installation of Rust toolchain via rustup</li>
+        <li>Support for stable, beta, nightly, and specific version numbers</li>
+        <li>Multiple Rust version management</li>
+        <li>Cross-platform support (Linux, macOS, Windows)</li>
+        <li>Build wrapper integration for easy job configuration</li>
+        <li>Automatic PATH, CARGO_HOME, and RUSTUP_HOME environment variable setup</li>
+    </ul>
+    <p>
+        Configure Rust installations in <b>Manage Jenkins</b> → <b>Global Tool Configuration</b> → <b>Rust Installations</b>.
+    </p>
+</div>

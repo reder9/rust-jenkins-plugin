@@ -1,0 +1,26 @@
+<?jelly escape-by-default='true'?>
+<j:jelly xmlns:j="jelly:core" xmlns:f="/lib/form">
+  <f:entry title="${%Rust Version}" field="version">
+    <f:textbox default="stable" />
+    <f:description>
+      Specify the Rust version to install (e.g., "stable", "beta", "nightly", or "1.75.0").
+      The plugin will use rustup to install the specified version.
+    </f:description>
+  </f:entry>
+  
+  <f:entry title="${%Prefer Built-in Tools}" field="preferBuiltInTools">
+    <f:checkbox default="false" />
+    <f:description>
+      If checked, the plugin will prefer using system-installed Rust/Cargo if available,
+      rather than installing a new version.
+    </f:description>
+  </f:entry>
+  
+  <f:entry title="${%Install rustup}" field="installRustup">
+    <f:checkbox default="true" />
+    <f:description>
+      If checked, the plugin will install rustup if it's not already available.
+      Uncheck this if rustup is already installed on the system.
+    </f:description>
+  </f:entry>
+</j:jelly>

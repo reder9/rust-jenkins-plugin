@@ -1,0 +1,11 @@
+Jenkins-Version: 2.376.4
+Plugin-Version: 1.0.0
+Short-Name: rust
+Long-Name: Rust Plugin
+Plugin-Class: io.jenkins.plugins.rust.RustPlugin
+Manifest-Version: 1.0
+Created-By: Caleb Reder
+Specification-Title: Jenkins Rust Plugin
+Specification-Version: 1.0.0
+Implementation-Title: Jenkins Rust Plugin
+Implementation-Version: 1.0.0
