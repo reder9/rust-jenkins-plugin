@@ -1,0 +1,39 @@
+<div>
+    Configures a Rust environment for the wrapped block.
+
+    <p>
+        This step sets up the Rust environment (CARGO_HOME, RUSTUP_HOME, PATH) for all commands
+        executed within its closure.
+    </p>
+
+    <h3>Examples:</h3>
+
+    <h4>Scripted Pipeline:</h4>
+    <pre>
+withRust(rustInstallationName: 'stable') {
+    sh 'cargo build --release'
+    sh 'cargo test'
+}
+  </pre>
+
+    <h4>Declarative Pipeline:</h4>
+    <pre>
+pipeline {
+    agent any
+    stages {
+        stage('Build') {
+            steps {
+                withRust(rustInstallationName: 'nightly') {
+                    sh 'cargo build'
+                }
+            }
+        }
+    }
+}
+  </pre>
+
+    <p>
+        <strong>Note:</strong> For simpler usage, consider using the <code>tools</code> block
+        or the dedicated pipeline steps like <code>cargoBuild()</code>, <code>cargoTest()</code>, etc.
+    </p>
+</div>

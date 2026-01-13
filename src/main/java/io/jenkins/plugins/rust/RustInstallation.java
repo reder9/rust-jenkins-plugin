@@ -10,6 +10,7 @@ import hudson.tools.ToolDescriptor;
 import hudson.tools.ToolInstallation;
 import hudson.tools.ToolProperty;
 import hudson.util.FormValidation;
+import hudson.model.Run;
 import jenkins.model.Jenkins;
 import org.jenkinsci.Symbol;
 import org.kohsuke.stapler.DataBoundConstructor;
@@ -129,6 +130,12 @@ public class RustInstallation extends ToolInstallation
 
     @Override
     public void buildEnvVars(EnvVars env) {
+        // This method is deprecated in ToolInstallation and should not be used for new
+        // plugins.
+        // The buildEnvironmentFor method below is the preferred way to contribute
+        // environment variables.
+        // For backward compatibility, if this method is still called, we ensure it sets
+        // the PATH correctly.
         String home = getHome();
         if (home == null || home.isEmpty()) {
             return;
@@ -138,14 +145,9 @@ public class RustInstallation extends ToolInstallation
         env.put("CARGO_HOME", home);
         env.put("RUSTUP_HOME", home + File.separator + "rustup");
 
-        // Add Rust bin to PATH
-        String bin = home + File.separator + "bin";
-        String path = env.get("PATH");
-        if (path != null && !path.isEmpty()) {
-            env.put("PATH", bin + File.pathSeparator + path);
-        } else {
-            env.put("PATH", bin);
-        }
+        // Add Rust bin to PATH using the PATH+ prefix syntax
+        // This is the safest way to prepend to PATH in Jenkins
+        env.put("PATH+RUST", home + File.separator + "bin");
     }
 
     @Override

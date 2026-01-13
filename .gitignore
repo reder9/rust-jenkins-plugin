@@ -25,7 +25,6 @@ maven-eclipse.xml
 .DS_Store
 
 # User Specific Request
-Jenkinsfile
 
 # Logs/Temporary
 *.log

@@ -1,0 +1,23 @@
+<div>
+  Runs a Cargo command in your Rust project.
+  
+  <h3>Examples:</h3>
+  
+  <h4>Basic usage:</h4>
+  <pre><code>cargo(command: 'build')</code></pre>
+  
+  <h4>With arguments:</h4>
+  <pre><code>cargo(command: 'build', args: '--release')</code></pre>
+  
+  <h4>With specific Rust installation:</h4>
+  <pre><code>cargo(command: 'test', rustInstallationName: 'Rust-Stable')</code></pre>
+  
+  <h4>Run clippy:</h4>
+  <pre><code>cargo(command: 'clippy', args: '--all-targets -- -D warnings')</code></pre>
+  
+  <p>
+    If no Rust installation is specified, the step will use the Rust installation
+    configured in the <code>tools</code> block, or the first available installation,
+    or system <code>cargo</code> if none is configured.
+  </p>
+</div>

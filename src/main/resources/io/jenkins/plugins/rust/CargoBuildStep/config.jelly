@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?jelly escape-by-default='true'?>
+<j:jelly xmlns:j="jelly:core" xmlns:f="/lib/form">
+  <f:entry title="Release Mode" field="release">
+    <f:checkbox />
+  </f:entry>
+  
+  <f:entry title="Target" field="target" description="Target triple (e.g., wasm32-unknown-unknown)">
+    <f:textbox />
+  </f:entry>
+  
+  <f:entry title="Features" field="features" description="Comma-separated list of features to enable">
+    <f:textbox />
+  </f:entry>
+  
+  <f:entry title="Rust Installation" field="rustInstallationName" description="Optional: Select a specific Rust installation">
+    <f:select />
+  </f:entry>
+</j:jelly>

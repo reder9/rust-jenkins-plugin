@@ -1,19 +1,21 @@
 package io.jenkins.plugins.rust;
 
+import hudson.EnvVars;
 import hudson.Extension;
+import hudson.FilePath;
 import hudson.Launcher;
-import hudson.model.AbstractBuild;
 import hudson.model.AbstractProject;
-import hudson.model.BuildListener;
+import hudson.model.Run;
+import hudson.model.TaskListener;
 import hudson.tasks.BuildWrapperDescriptor;
 import hudson.util.ListBoxModel;
+import jenkins.tasks.SimpleBuildWrapper;
 import org.jenkinsci.Symbol;
 import org.kohsuke.stapler.DataBoundConstructor;
 
 import java.io.File;
 import java.io.IOException;
 import java.io.Serializable;
-import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -21,7 +23,7 @@ import java.util.logging.Logger;
  * Build wrapper that sets up Rust environment for a build.
  * Supports both freestyle jobs and Pipeline.
  */
-public class RustBuildWrapper extends hudson.tasks.BuildWrapper implements Serializable {
+public class RustBuildWrapper extends SimpleBuildWrapper implements Serializable {
     private static final long serialVersionUID = 1L;
     private static final Logger LOGGER = Logger.getLogger(RustBuildWrapper.class.getName());
 
@@ -37,13 +39,12 @@ public class RustBuildWrapper extends hudson.tasks.BuildWrapper implements Seria
     }
 
     @Override
-    public Environment setUp(AbstractBuild build, Launcher launcher, BuildListener listener)
-            throws IOException, InterruptedException {
+    public void setUp(Context context, Run<?, ?> build, FilePath workspace, Launcher launcher,
+            TaskListener listener, EnvVars initialEnvironment) throws IOException, InterruptedException {
 
         if (rustInstallationName == null || rustInstallationName.trim().isEmpty()) {
             listener.getLogger().println("No Rust installation specified");
-            return new Environment() {
-            };
+            return;
         }
 
         // Get the installation
@@ -60,54 +61,44 @@ public class RustBuildWrapper extends hudson.tasks.BuildWrapper implements Seria
         if (installation == null) {
             listener.error("Rust installation not found: " + rustInstallationName);
             LOGGER.log(Level.WARNING, "Rust installation not found: {0}", rustInstallationName);
-            return new Environment() {
-            };
+            return;
         }
 
         listener.getLogger().println("Setting up Rust environment: " + rustInstallationName);
 
+        // Expand variables and translate for node
+        installation = installation.forNode(build.getExecutor().getOwner().getNode(), listener);
+        installation = installation.forEnvironment(build.getEnvironment(listener));
+
         final String rustHome = installation.getHome();
         listener.getLogger().println("Rust Home: " + rustHome);
 
-        return new Environment() {
-            @Override
-            public void buildEnvVars(Map<String, String> env) {
-                // Set CARGO_HOME and RUSTUP_HOME
-                env.put("CARGO_HOME", rustHome);
-                env.put("RUSTUP_HOME", rustHome + File.separator + "rustup");
+        // Set CARGO_HOME and RUSTUP_HOME
+        context.env("CARGO_HOME", rustHome);
+        context.env("RUSTUP_HOME", rustHome + File.separator + "rustup");
 
-                // Add Rust bin to PATH
-                String rustBinPath = rustHome + File.separator + "bin";
-                String pathValue = env.get("PATH");
+        // Add Rust bin to PATH using the PATH+ prefix syntax
+        // Jenkins handles merging this correctly
+        context.env("PATH+RUST", rustHome + File.separator + "bin");
 
-                if (pathValue == null || pathValue.isEmpty()) {
-                    env.put("PATH", rustBinPath);
-                } else {
-                    env.put("PATH", rustBinPath + File.pathSeparator + pathValue);
+        listener.getLogger().println("Rust environment setup complete");
+        listener.getLogger().println("CARGO_HOME=" + rustHome);
+
+        // Verify installation
+        File homeDir = new File(rustHome);
+        if (!RustInstaller.verifyInstallation(homeDir)) {
+            listener.error("WARNING: Rust installation verification failed. " +
+                    "cargo or rustc binary not found in bin directory.");
+        } else {
+            try {
+                String version = RustInstaller.getCargoVersion(homeDir);
+                if (version != null) {
+                    listener.getLogger().println("Using Rust/Cargo " + version);
                 }
-
-                listener.getLogger().println("Rust bin added to PATH: " + rustBinPath);
-                listener.getLogger().println("CARGO_HOME=" + rustHome);
-                listener.getLogger().println("RUSTUP_HOME=" + rustHome + File.separator + "rustup");
-
-                // Verify installation
-                File homeDir = new File(rustHome);
-                if (!RustInstaller.verifyInstallation(homeDir)) {
-                    listener.error("WARNING: Rust installation verification failed. " +
-                            "cargo or rustc binary not found in: " + rustBinPath);
-                    LOGGER.log(Level.WARNING, "Rust installation verification failed for: {0}", rustHome);
-                } else {
-                    try {
-                        String version = RustInstaller.getCargoVersion(homeDir);
-                        if (version != null) {
-                            listener.getLogger().println("Using Rust/Cargo " + version);
-                        }
-                    } catch (Exception e) {
-                        LOGGER.log(Level.FINE, "Could not determine Rust version", e);
-                    }
-                }
+            } catch (Exception e) {
+                LOGGER.log(Level.FINE, "Could not determine Rust version", e);
             }
-        };
+        }
     }
 
     /**
