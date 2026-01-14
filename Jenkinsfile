@@ -5,8 +5,8 @@
 buildPlugin(
   useContainerAgent: true,
   configurations: [
-    [platform: 'linux', jdk: 17],
-    [platform: 'windows', jdk: 17],
+    [platform: 'linux', jdk: 21],
+    [platform: 'windows', jdk: 21],
   ],
   // Opt-in to running integration tests with the PCT (plugin compatibility test)
   // More info: https://github.com/jenkinsci/plugin-compat-tester
