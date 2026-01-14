@@ -5,36 +5,52 @@
     <parent>
         <groupId>org.jenkins-ci.plugins</groupId>
         <artifactId>plugin</artifactId>
-        <version>4.82</version>
+        <version>4.88</version>
         <relativePath />
     </parent>
 
-    <groupId>io.github.redersoft</groupId>
+    <groupId>io.jenkins.plugins</groupId>
     <artifactId>rust</artifactId>
-    <version>1.0.0</version>
+    <version>${revision}${changelist}</version>
     <packaging>hpi</packaging>
     <name>Rust Plugin</name>
     <description>Automated Rust and Cargo version management and installation for Jenkins</description>
     <url>https://github.com/jenkinsci/rust-plugin</url>
 
+    <licenses>
+        <license>
+            <name>MIT License</name>
+            <url>https://opensource.org/licenses/MIT</url>
+            <distribution>repo</distribution>
+        </license>
+    </licenses>
+
+    <developers>
+        <developer>
+            <id>reder9</id>
+            <name>RederSoft</name>
+            <email>your-email@example.com</email>
+        </developer>
+    </developers>
+
     <properties>
-        <revision>1.0.0</revision>
-        <changelist>-SNAPSHOT</changelist>
-        <jenkins.version>2.387.3</jenkins.version>
-        <java.level>11</java.level>
-        <java.version.source>11</java.version.source>
-        <java.version.target>11</java.version.target>
-        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <maven.compiler.source>11</maven.compiler.source>
-        <maven.compiler.target>11</maven.compiler.target>
+        <revision>1.0</revision>
+        <changelist>999999-SNAPSHOT</changelist>
+        <jenkins.baseline>2.479</jenkins.baseline>
+        <jenkins.version>${jenkins.baseline}.3</jenkins.version>
+        <gitHubRepo>jenkinsci/rust-plugin</gitHubRepo>
+        
+        <!-- Modern Jenkins plugin requirements -->
+        <hpi.strictBundledArtifacts>true</hpi.strictBundledArtifacts>
+        <ban-commons-lang-2.skip>false</ban-commons-lang-2.skip>
     </properties>
 
     <dependencyManagement>
         <dependencies>
             <dependency>
                 <groupId>io.jenkins.tools.bom</groupId>
-                <artifactId>bom-2.387.x</artifactId>
-                <version>2102.v854b_fec19c92</version>
+                <artifactId>bom-${jenkins.baseline}.x</artifactId>
+                <version>3566.vce7fb_e65115a_</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
@@ -48,7 +64,6 @@
         <dependency>
             <groupId>commons-io</groupId>
             <artifactId>commons-io</artifactId>
-            <version>2.15.1</version>
         </dependency>
 
         <!-- Pipeline support dependencies -->
@@ -78,11 +93,10 @@
             <optional>true</optional>
         </dependency>
 
-        <!-- JSON processing (bundled with the plugin) -->
+        <!-- JSON API plugin (replaces org.json:json) -->
         <dependency>
-            <groupId>org.json</groupId>
-            <artifactId>json</artifactId>
-            <version>20231013</version>
+            <groupId>io.jenkins.plugins</groupId>
+            <artifactId>json-api</artifactId>
         </dependency>
 
         <!-- Testing -->
@@ -95,7 +109,6 @@
         <dependency>
             <groupId>org.hamcrest</groupId>
             <artifactId>hamcrest</artifactId>
-            <version>2.2</version>
             <scope>test</scope>
         </dependency>
 
@@ -136,64 +149,11 @@
     </dependencies>
 
     <scm>
-        <connection>scm:git:https://github.com/jenkinsci/rust-plugin.git</connection>
-        <developerConnection>scm:git:git@github.com:jenkinsci/rust-plugin.git</developerConnection>
+        <connection>scm:git:https://github.com/${gitHubRepo}.git</connection>
+        <developerConnection>scm:git:git@github.com:${gitHubRepo}.git</developerConnection>
         <tag>${scmTag}</tag>
-        <url>https://github.com/jenkinsci/rust-plugin</url>
+        <url>https://github.com/${gitHubRepo}</url>
     </scm>
-
-    <build>
-        <plugins>
-            <plugin>
-                <groupId>org.jenkins-ci.tools</groupId>
-                <artifactId>maven-hpi-plugin</artifactId>
-                <configuration>
-                    <disabledTestInjection>true</disabledTestInjection>
-                </configuration>
-            </plugin>
-            <!-- Skip license generation from parent POM -->
-            <plugin>
-                <groupId>io.jenkins.tools.maven</groupId>
-                <artifactId>license-maven-plugin</artifactId>
-                <executions>
-                    <execution>
-                        <goals>
-                            <goal>process</goal>
-                        </goals>
-                        <phase>none</phase>
-                    </execution>
-                </executions>
-            </plugin>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-surefire-plugin</artifactId>
-                <configuration>
-                    <systemPropertyVariables>
-                        <java.util.logging.config.file>${project.build.testOutputDirectory}/logging.properties</java.util.logging.config.file>
-                    </systemPropertyVariables>
-                </configuration>
-            </plugin>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-checkstyle-plugin</artifactId>
-                <version>3.1.2</version>
-                <configuration>
-                    <failsOnError>false</failsOnError>
-                </configuration>
-            </plugin>
-            <!-- SpotBugs for static analysis -->
-            <plugin>
-                <groupId>com.github.spotbugs</groupId>
-                <artifactId>spotbugs-maven-plugin</artifactId>
-                <configuration>
-                    <skip>false</skip>
-                    <effort>Max</effort>
-                    <threshold>Low</threshold>
-                    <xmlOutput>true</xmlOutput>
-                </configuration>
-            </plugin>
-        </plugins>
-    </build>
 
     <repositories>
         <repository>
@@ -208,15 +168,4 @@
             <url>https://repo.jenkins-ci.org/public/</url>
         </pluginRepository>
     </pluginRepositories>
-
-    <distributionManagement>
-        <repository>
-            <id>maven.jenkins-ci.org</id>
-            <url>https://repo.jenkins-ci.org/releases/</url>
-        </repository>
-        <snapshotRepository>
-            <id>maven.jenkins-ci.org</id>
-            <url>https://repo.jenkins-ci.org/snapshots/</url>
-        </snapshotRepository>
-    </distributionManagement>
 </project>

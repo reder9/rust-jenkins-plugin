@@ -1,0 +1,26 @@
+# To automatically get issues created when a CVE is discovered in one of your plugin's dependencies,
+# use the Jenkins Security Scan workflow available from the Jenkins template repository:
+# https://github.com/jenkinsci/.github/blob/master/workflow-templates/jenkins-security-scan.yaml
+# Instructions for use are included in the workflow.
+
+name: Jenkins Security Scan
+
+on:
+  push:
+    branches:
+      - "master"
+      - "main"
+  pull_request:
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+
+permissions:
+  security-events: write
+  contents: read
+  actions: read
+
+jobs:
+  security-scan:
+    uses: jenkins-infra/jenkins-security-scan/.github/workflows/jenkins-security-scan.yaml@v2
+    with:
+      java-cache: 'maven' # Optionally enable use of a build dependency cache. Specify 'maven' or 'gradle' as appropriate.
