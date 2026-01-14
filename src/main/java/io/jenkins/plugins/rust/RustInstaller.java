@@ -19,7 +19,8 @@ public class RustInstaller {
     private static final Logger LOGGER = Logger.getLogger(RustInstaller.class.getName());
 
     private static final String RUSTUP_INSTALLER_URL = "https://sh.rustup.rs";
-    private static final String RUSTUP_INSTALLER_WINDOWS_URL = "https://win.rustup.rs/x86_64";
+    private static final String RUSTUP_INSTALLER_WINDOWS_X86_URL = "https://win.rustup.rs/x86_64";
+    private static final String RUSTUP_INSTALLER_WINDOWS_ARM_URL = "https://win.rustup.rs/aarch64";
     private static final int MAX_RETRIES = 3;
     private static final int RETRY_DELAY_MS = 2000;
 
@@ -238,7 +239,8 @@ public class RustInstaller {
      * Install rustup on Unix-like systems (Linux, macOS).
      */
     private static void installRustupUnix(File destination) throws IOException, InterruptedException {
-        LOGGER.info("Installing rustup for Unix-like system");
+        String arch = getArchitecture();
+        LOGGER.log(Level.INFO, "Installing rustup for Unix-like system ({0})", arch);
 
         File installer = new File(destination, "rustup-init.sh");
 
@@ -298,15 +300,19 @@ public class RustInstaller {
      * Install rustup on Windows.
      */
     private static void installRustupWindows(File destination) throws IOException, InterruptedException {
-        LOGGER.info("Installing rustup for Windows");
+        String arch = getArchitecture();
+        LOGGER.log(Level.INFO, "Installing rustup for Windows ({0})", arch);
 
         File installer = new File(destination, "rustup-init.exe");
 
+        // Get the appropriate installer URL for the architecture
+        String installerUrl = getWindowsInstallerUrl();
+
         // Download rustup-init.exe
-        LOGGER.log(Level.INFO, "Downloading rustup installer from: {0}", RUSTUP_INSTALLER_WINDOWS_URL);
+        LOGGER.log(Level.INFO, "Downloading rustup installer from: {0}", installerUrl);
         ProcessBuilder downloadPb = new ProcessBuilder(
                 "powershell", "-NoProfile", "-Command",
-                "Invoke-WebRequest -Uri '" + RUSTUP_INSTALLER_WINDOWS_URL + "' -OutFile '" +
+                "Invoke-WebRequest -Uri '" + installerUrl + "' -OutFile '" +
                         installer.getAbsolutePath() + "' -UseBasicParsing");
         downloadPb.redirectErrorStream(true);
 
@@ -451,5 +457,46 @@ public class RustInstaller {
      */
     private static boolean isWindows() {
         return File.pathSeparatorChar == ';';
+    }
+
+    /**
+     * Get the system architecture.
+     *
+     * @return Architecture string: "x86_64", "aarch64", or detected value
+     */
+    private static String getArchitecture() {
+        String osArch = System.getProperty("os.arch").toLowerCase();
+
+        // Normalize architecture names
+        if (osArch.contains("amd64") || osArch.contains("x86_64")) {
+            return "x86_64";
+        } else if (osArch.contains("aarch64") || osArch.contains("arm64")) {
+            return "aarch64";
+        } else if (osArch.contains("arm")) {
+            // Generic ARM, likely 32-bit - rustup doesn't support this on Windows
+            LOGGER.log(Level.WARNING, "Detected ARM architecture: {0}. This may not be supported.", osArch);
+            return "arm";
+        }
+
+        // Return original value for unknown architectures
+        LOGGER.log(Level.WARNING, "Unknown architecture: {0}. Using as-is.", osArch);
+        return osArch;
+    }
+
+    /**
+     * Get the appropriate Windows rustup installer URL for the current
+     * architecture.
+     *
+     * @return URL string for the rustup installer
+     */
+    private static String getWindowsInstallerUrl() {
+        String arch = getArchitecture();
+        if ("aarch64".equals(arch)) {
+            LOGGER.log(Level.INFO, "Detected ARM64 architecture, using ARM installer");
+            return RUSTUP_INSTALLER_WINDOWS_ARM_URL;
+        } else {
+            LOGGER.log(Level.INFO, "Detected x86_64 architecture, using x86_64 installer");
+            return RUSTUP_INSTALLER_WINDOWS_X86_URL;
+        }
     }
 }
