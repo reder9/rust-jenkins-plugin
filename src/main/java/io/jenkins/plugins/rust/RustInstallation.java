@@ -15,6 +15,7 @@ import jenkins.model.Jenkins;
 import org.jenkinsci.Symbol;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.QueryParameter;
+import org.kohsuke.stapler.verb.POST;
 
 import java.io.File;
 import java.io.IOException;
@@ -179,6 +180,7 @@ public class RustInstallation extends ToolInstallation
         /**
          * Validate tool installation home directory.
          */
+        @POST
         public FormValidation doCheckHome(@QueryParameter final String value) {
             // Check permission
             Jenkins jenkins = Jenkins.getInstanceOrNull();
@@ -220,7 +222,10 @@ public class RustInstallation extends ToolInstallation
         /**
          * Validate tool name.
          */
+        @POST
         public FormValidation doCheckName(@QueryParameter final String value) {
+            Jenkins.get().checkPermission(Jenkins.ADMINISTER);
+
             if (value == null || value.trim().isEmpty()) {
                 return FormValidation.error("Rust installation name cannot be empty");
             }

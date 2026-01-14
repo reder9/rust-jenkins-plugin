@@ -8,9 +8,11 @@ import hudson.tools.ToolInstallation;
 import hudson.tools.ToolInstaller;
 import hudson.tools.ToolInstallerDescriptor;
 import hudson.util.FormValidation;
+import jenkins.model.Jenkins;
 import org.jenkinsci.Symbol;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.QueryParameter;
+import org.kohsuke.stapler.verb.POST;
 
 import java.io.File;
 import java.io.IOException;
@@ -156,7 +158,10 @@ public class RustToolInstaller extends ToolInstaller {
         /**
          * Validate version string.
          */
+        @POST
         public FormValidation doCheckVersion(@QueryParameter String value) {
+            Jenkins.get().checkPermission(Jenkins.ADMINISTER);
+
             if (value == null || value.trim().isEmpty()) {
                 return FormValidation.error(
                         "Version cannot be empty. Please specify 'stable', 'beta', 'nightly', or a specific version like '1.75.0'");
@@ -182,7 +187,7 @@ public class RustToolInstaller extends ToolInstaller {
 
             // Provide helpful error message
             StringBuilder errorMsg = new StringBuilder();
-            errorMsg.append("Invalid Rust version format: '").append(trimmedValue).append("'.\n\n");
+            errorMsg.append("Invalid Rust version format: '").append(trimmedValue).append(".\n\n");
             errorMsg.append("Valid formats:\n");
             errorMsg.append("  • Channels: stable, beta, nightly\n");
             errorMsg.append("  • Version numbers: 1.75.0, 1.76, 1.80.1\n");

@@ -9,9 +9,11 @@ import hudson.model.Run;
 import hudson.model.TaskListener;
 import hudson.tasks.BuildWrapperDescriptor;
 import hudson.util.ListBoxModel;
+import jenkins.model.Jenkins;
 import jenkins.tasks.SimpleBuildWrapper;
 import org.jenkinsci.Symbol;
 import org.kohsuke.stapler.DataBoundConstructor;
+import org.kohsuke.stapler.verb.POST;
 
 import java.io.File;
 import java.io.IOException;
@@ -121,7 +123,10 @@ public class RustBuildWrapper extends SimpleBuildWrapper implements Serializable
         /**
          * Fill the Rust installation dropdown.
          */
+        @POST
         public ListBoxModel doFillRustInstallationNameItems() {
+            Jenkins.get().checkPermission(Jenkins.ADMINISTER);
+
             ListBoxModel items = new ListBoxModel();
             items.add("(Default)", "");
 

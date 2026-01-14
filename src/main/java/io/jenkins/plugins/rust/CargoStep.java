@@ -6,7 +6,9 @@ import hudson.FilePath;
 import hudson.Launcher;
 import hudson.model.Run;
 import hudson.model.TaskListener;
+import hudson.security.ACL;
 import hudson.util.ListBoxModel;
+import jenkins.model.Jenkins;
 import org.jenkinsci.Symbol;
 import org.jenkinsci.plugins.workflow.steps.Step;
 import org.jenkinsci.plugins.workflow.steps.StepContext;
@@ -15,6 +17,7 @@ import org.jenkinsci.plugins.workflow.steps.StepExecution;
 import org.jenkinsci.plugins.workflow.steps.SynchronousNonBlockingStepExecution;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.DataBoundSetter;
+import org.kohsuke.stapler.verb.POST;
 
 import java.io.File;
 import java.io.IOException;
@@ -89,7 +92,10 @@ public class CargoStep extends Step implements Serializable {
         /**
          * Fill the Rust installation dropdown.
          */
+        @POST
         public ListBoxModel doFillRustInstallationNameItems() {
+            Jenkins.get().checkPermission(Jenkins.ADMINISTER);
+
             ListBoxModel items = new ListBoxModel();
             items.add("(Use tools block)", "");
 
