@@ -3,9 +3,11 @@ package io.jenkins.plugins.rust;
 import java.util.logging.Logger;
 
 import org.kohsuke.stapler.QueryParameter;
+import org.kohsuke.stapler.verb.POST;
 
 import hudson.Extension;
 import hudson.util.FormValidation;
+import jenkins.model.Jenkins;
 
 /**
  * Descriptor for RustToolInstaller
